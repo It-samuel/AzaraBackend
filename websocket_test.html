@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice RAG REST API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        .messages {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+            background: #f9f9f9;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 4px solid #007bff;
+        }
+        .query { background: #e3f2fd; border-left-color: #2196f3; }
+        .response { background: #f3e5f5; border-left-color: #9c27b0; }
+        .error { background: #ffebee; color: #c62828; border-left-color: #f44336; }
+        .audio-response { background: #e8f5e8; border-left-color: #4caf50; }
+        .debug { background: #fff3cd; border-left-color: #ffc107; color: #856404; }
+        input, button {
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: none;
+            color: #666;
+            font-style: italic;
+        }
+        .audio-controls {
+            margin: 10px 0;
+        }
+        audio {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .audio-debug {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .volume-control {
+            margin: 10px 0;
+        }
+        .volume-control input {
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Voice RAG REST API Test Client</h1>
+        
+        <div id="status" class="status disconnected">
+            Ready to test API
+        </div>
+        
+        <div class="volume-control">
+            <label for="volumeSlider">Master Volume: </label>
+            <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="1">
+            <span id="volumeDisplay">100%</span>
+            <button onclick="testSystemAudio()">Test System Audio</button>
+        </div>
+        
+        <div>
+            <button onclick="testHealth()">Test Health</button>
+            <button onclick="testRAGOnly()">Test RAG Only</button>
+            <button onclick="testTTSOnly()">Test TTS Only</button>
+            <button onclick="testFullFlow()">Test Full Flow (RAG + TTS)</button>
+            <button onclick="clearMessages()">Clear Messages</button>
+        </div>
+        
+        <div class="messages" id="messages"></div>
+        
+        <div>
+            <input type="text" id="queryInput" placeholder="Enter your query..." style="width: 70%;" value="Why does Samuel want to join the DevOps internship?">
+            <button onclick="sendQuery()" id="queryBtn">Send Query</button>
+        </div>
+        
+        <div>
+            <h3>Quick Test Queries:</h3>
+            <button onclick="sendTestQuery('Tell me about Samuel')">Test: About Samuel</button>
+            <button onclick="sendTestQuery('What is DevOps?')">Test: DevOps Info</button>
+            <button onclick="sendTestQuery('Nithub internship details')">Test: Internship Details</button>
+        </div>
+        
+        <div class="loading" id="loading">
+            Processing request...
+        </div>
+        
+        <div>
+            <h3>Connection Info:</h3>
+            <p><strong>API Base URL:</strong> http://localhost:3000</p>
+            <p><strong>RAG Endpoint:</strong> /api/rag/query</p>
+            <p><strong>TTS Endpoint:</strong> /api/speech/text-to-speech</p>
+            <p><strong>Health Check:</strong> <a href="http://localhost:3000/health" target="_blank">http://localhost:3000/health</a></p>
+        </div>
+    </div>
+
+    <script>
+        // Debug flag - set to true to see detailed console logs
+        const DEBUG = true;
+        
+        const messages = document.getElementById('messages');
+        const status = document.getElementById('status');
+        const loading = document.getElementById('loading');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const volumeDisplay = document.getElementById('volumeDisplay');
+
+        // Audio context for better browser compatibility
+        let audioContext;
+        let userInteracted = false;
+
+        function debugLog(message, data = null) {
+            if (DEBUG) {
+                console.log(`[DEBUG] ${message}`, data || '');
+            }
+        }
+
+        // Initialize audio context after user interaction
+        function initAudioContext() {
+            if (!audioContext && userInteracted) {
+                try {
+                    debugLog('Attempting to initialize audio context');
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    
+                    // Resume the context in case it was suspended
+                    if (audioContext.state === 'suspended') {
+                        debugLog('Audio context is suspended, attempting to resume');
+                        audioContext.resume().then(() => {
+                            debugLog('Audio context resumed successfully');
+                            addMessage('Audio context resumed successfully', 'debug');
+                        }).catch(e => {
+                            debugLog('Failed to resume audio context', e);
+                            addMessage(`Audio context resume failed: ${e.message}`, 'error');
+                        });
+                    }
+                    
+                    addMessage('Audio context initialized', 'debug');
+                    debugLog('Audio context initialized successfully');
+                } catch (e) {
+                    debugLog('Audio context initialization failed', e);
+                    addMessage(`Audio context failed: ${e.message}`, 'error');
+                }
+            }
+        }
+
+        // Track user interaction for audio autoplay policy
+        document.addEventListener('click', () => {
+            if (!userInteracted) {
+                userInteracted = true;
+                debugLog('First user interaction detected');
+                initAudioContext();
+                addMessage('User interaction detected - audio autoplay enabled', 'debug');
+            }
+        });
+
+        // Volume control
+        volumeSlider.addEventListener('input', function() {
+            const volume = this.value;
+            volumeDisplay.textContent = Math.round(volume * 100) + '%';
+            
+            // Update all existing audio elements
+            document.querySelectorAll('audio').forEach(audio => {
+                audio.volume = volume;
+            });
+            
+            debugLog('Volume changed to', volume);
+        });
+
+        function addMessage(content, type = 'response', includeAudio = false) {
+            debugLog(`Adding message of type ${type}`, {content, includeAudio});
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            let audioHtml = '';
+            if (includeAudio && type === 'audio-response') {
+                const audioId = 'audio-' + Date.now();
+                audioHtml = `
+                    <div class="audio-controls">
+                        <audio id="${audioId}" controls preload="auto" volume="${volumeSlider.value}">
+                            <source src="${content.audioUrl}" type="audio/mpeg">
+                            Your browser does not support the audio element.
+                        </audio>
+                        <div class="audio-debug">
+                            <small>Audio Size: ${(content.blobSize/1024).toFixed(1)}KB</small><br>
+                            <button onclick="forcePlayAudio('${audioId}')">Force Play</button>
+                            <button onclick="downloadAudio('${content.audioUrl}', 'test-audio.mp3')">Download</button>
+                            <button onclick="debugAudioElement('${audioId}')">Debug Info</button>
+                        </div>
+                    </div>
+                `;
+                
+                // Add debug event listeners to the new audio element
+                setTimeout(() => {
+                    const audioElement = document.getElementById(audioId);
+                    if (audioElement) {
+                        debugLog('Setting up audio element event listeners', audioId);
+                        
+                        audioElement.volume = volumeSlider.value;
+                        
+                        const events = [
+                            'loadstart', 'progress', 'suspend', 'abort', 'error',
+                            'emptied', 'stalled', 'loadedmetadata', 'loadeddata',
+                            'canplay', 'canplaythrough', 'playing', 'waiting',
+                            'seeking', 'seeked', 'ended', 'durationchange',
+                            'timeupdate', 'play', 'pause', 'ratechange',
+                            'volumechange'
+                        ];
+                        
+                        events.forEach(event => {
+                            audioElement.addEventListener(event, (e) => {
+                                debugLog(`Audio event: ${event}`, {
+                                    readyState: e.target.readyState,
+                                    networkState: e.target.networkState,
+                                    error: e.target.error
+                                });
+                            });
+                        });
+                    }
+                }, 100);
+            }
+            
+            messageDiv.innerHTML = `
+                <strong>${new Date().toLocaleTimeString()}:</strong>
+                ${audioHtml}
+                <div>${typeof content === 'object' && !includeAudio ? JSON.stringify(content, null, 2) : (content.text || content)}</div>
+            `;
+            messages.appendChild(messageDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function forcePlayAudio(audioId) {
+            debugLog(`Attempting to force play audio`, audioId);
+            const audio = document.getElementById(audioId);
+            if (audio) {
+                audio.currentTime = 0;
+                audio.volume = volumeSlider.value;
+                audio.play()
+                    .then(() => {
+                        debugLog('Force play successful', audioId);
+                        addMessage(`Force play successful for ${audioId}`, 'debug');
+                    })
+                    .catch(e => {
+                        debugLog('Force play failed', {audioId, error: e});
+                        addMessage(`Force play failed for ${audioId}: ${e.message}`, 'error');
+                    });
+            } else {
+                debugLog('Audio element not found for force play', audioId);
+            }
+        }
+
+        function downloadAudio(url, filename) {
+            debugLog('Downloading audio', {url, filename});
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        function debugAudioElement(audioId) {
+            const audio = document.getElementById(audioId);
+            if (audio) {
+                const debugInfo = {
+                    id: audioId,
+                    src: audio.src,
+                    readyState: audio.readyState,
+                    networkState: audio.networkState,
+                    currentTime: audio.currentTime,
+                    duration: audio.duration,
+                    volume: audio.volume,
+                    muted: audio.muted,
+                    paused: audio.paused,
+                    ended: audio.ended,
+                    error: audio.error ? audio.error.message : null
+                };
+                debugLog('Audio element debug info', debugInfo);
+                addMessage(`Audio Debug Info: ${JSON.stringify(debugInfo, null, 2)}`, 'debug');
+            } else {
+                debugLog('Audio element not found for debugging', audioId);
+            }
+        }
+
+        function testSystemAudio() {
+            debugLog('Testing system audio');
+            addMessage('Testing system audio with generated tone...', 'debug');
+            
+            if (!audioContext) {
+                initAudioContext();
+            }
+            
+            if (audioContext) {
+                try {
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+                    gainNode.gain.setValueAtTime(0.3 * volumeSlider.value, audioContext.currentTime);
+                    
+                    oscillator.start();
+                    oscillator.stop(audioContext.currentTime + 0.5);
+                    
+                    debugLog('System audio test completed');
+                    addMessage('System audio test completed (440Hz tone)', 'debug');
+                } catch (e) {
+                    debugLog('System audio test failed', e);
+                    addMessage(`System audio test failed: ${e.message}`, 'error');
+                }
+            } else {
+                debugLog('Audio context not available for system test');
+                addMessage('Audio context not available for system test', 'error');
+            }
+        }
+
+        function clearMessages() {
+            debugLog('Clearing messages');
+            messages.innerHTML = '';
+        }
+
+        function showLoading(show) {
+            loading.style.display = show ? 'block' : 'none';
+            debugLog(`Loading state: ${show}`);
+        }
+
+        async function testHealth() {
+            debugLog('Testing health endpoint');
+            showLoading(true);
+            try {
+                const response = await fetch('http://localhost:3000/health');
+                debugLog('Health check response', response);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                debugLog('Health check data', data);
+                
+                addMessage(`Health Check: ${JSON.stringify(data, null, 2)}`, 'response');
+                status.textContent = 'API is healthy';
+                status.className = 'status connected';
+            } catch (error) {
+                debugLog('Health check failed', error);
+                addMessage(`Health Check Failed: ${error.message}`, 'error');
+                status.textContent = 'API connection failed';
+                status.className = 'status disconnected';
+            }
+            showLoading(false);
+        }
+
+        async function testRAGOnly() {
+            const query = document.getElementById('queryInput').value.trim() || 'Test query';
+            debugLog('Testing RAG only', {query});
+            addMessage(`RAG Query: ${query}`, 'query');
+            showLoading(true);
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/rag/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ query })
+                });
+                
+                debugLog('RAG response received', response);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                debugLog('RAG data', data);
+                
+                addMessage(`RAG Response: ${data.data || JSON.stringify(data)}`, 'response');
+            } catch (error) {
+                debugLog('RAG error', error);
+                addMessage(`RAG Error: ${error.message}`, 'error');
+            }
+            showLoading(false);
+        }
+
+        async function testTTSOnly() {
+            const text = "This is a test of the text-to-speech functionality. Can you hear this audio clearly?";
+            debugLog('Testing TTS only', {text});
+            addMessage(`TTS Test: ${text}`, 'query');
+            showLoading(true);
+            
+            try {
+                debugLog('Sending TTS request');
+                const response = await fetch('http://localhost:3000/api/speech/text-to-speech', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ text })
+                });
+                
+                debugLog('TTS response received', {
+                    status: response.status,
+                    contentType: response.headers.get('content-type'),
+                    ok: response.ok
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const audioBlob = await response.blob();
+                debugLog('Audio blob created', {
+                    size: audioBlob.size,
+                    type: audioBlob.type
+                });
+                
+                if (audioBlob.size === 0) {
+                    throw new Error('Empty audio blob received');
+                }
+                
+                const audioUrl = URL.createObjectURL(audioBlob);
+                debugLog('Audio URL created', audioUrl);
+                
+                addMessage({ 
+                    audioUrl, 
+                    text: `TTS Audio (${(audioBlob.size/1024).toFixed(1)}KB)`,
+                    blobSize: audioBlob.size,
+                    blobType: audioBlob.type
+                }, 'audio-response', true);
+                
+                // Try to auto-play after a short delay if user has interacted
+                if (userInteracted) {
+                    setTimeout(() => {
+                        const audio = document.querySelector('audio:last-of-type');
+                        if (audio) {
+                            debugLog('Attempting auto-play');
+                            audio.play()
+                                .then(() => {
+                                    debugLog('Auto-play successful');
+                                    addMessage('Auto-play successful', 'debug');
+                                })
+                                .catch(e => {
+                                    debugLog('Auto-play failed', e);
+                                    addMessage(`Auto-play failed: ${e.message}`, 'debug');
+                                });
+                        }
+                    }, 300);
+                } else {
+                    debugLog('Skipping auto-play - no user interaction yet');
+                    addMessage('Auto-play skipped - no user interaction yet', 'debug');
+                }
+            } catch (error) {
+                debugLog('TTS error', error);
+                addMessage(`TTS Error: ${error.message}`, 'error');
+            }
+            showLoading(false);
+        }
+
+        async function testFullFlow() {
+            const query = document.getElementById('queryInput').value.trim() || 'Why does Samuel want to join the DevOps internship?';
+            debugLog('Testing full flow', {query});
+            addMessage(`Full Flow Query: ${query}`, 'query');
+            showLoading(true);
+            
+            try {
+                // Step 1: Get RAG response
+                debugLog('Step 1: Sending RAG query');
+                const ragResponse = await fetch('http://localhost:3000/api/rag/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ query })
+                });
+                
+                debugLog('RAG response received', ragResponse);
+                
+                if (!ragResponse.ok) {
+                    throw new Error(`HTTP ${ragResponse.status}`);
+                }
+                
+                const ragData = await ragResponse.json();
+                const responseText = ragData.data || ragData.message || 'No response text found';
+                debugLog('RAG data', ragData);
+                
+                addMessage(`RAG Response: ${responseText}`, 'response');
+                
+                // Step 2: Convert to speech
+                debugLog('Step 2: Converting to speech');
+                const ttsResponse = await fetch('http://localhost:3000/api/speech/text-to-speech', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ text: responseText })
+                });
+                
+                debugLog('TTS response received', ttsResponse);
+                
+                if (!ttsResponse.ok) {
+                    const errorText = await ttsResponse.text();
+                    throw new Error(`HTTP ${ttsResponse.status}: ${errorText}`);
+                }
+                
+                const audioBlob = await ttsResponse.blob();
+                debugLog('Audio blob created', {
+                    size: audioBlob.size,
+                    type: audioBlob.type
+                });
+                
+                const audioUrl = URL.createObjectURL(audioBlob);
+                debugLog('Audio URL created', audioUrl);
+                
+                addMessage({ 
+                    audioUrl, 
+                    text: `Complete Flow: Text + Audio (${(audioBlob.size/1024).toFixed(1)}KB)`,
+                    blobSize: audioBlob.size,
+                    blobType: audioBlob.type
+                }, 'audio-response', true);
+                
+                // Auto-play the result if user has interacted
+                if (userInteracted) {
+                    setTimeout(() => {
+                        const audio = document.querySelector('audio:last-of-type');
+                        if (audio) {
+                            debugLog('Attempting full flow auto-play');
+                            audio.play()
+                                .then(() => {
+                                    debugLog('Full flow auto-play successful');
+                                    addMessage('Full flow audio auto-play successful', 'debug');
+                                })
+                                .catch(e => {
+                                    debugLog('Full flow auto-play failed', e);
+                                    addMessage(`Full flow auto-play failed: ${e.message}`, 'debug');
+                                });
+                        }
+                    }, 300);
+                }
+            } catch (error) {
+                debugLog('Full flow error', error);
+                addMessage(`Full Flow Error: ${error.message}`, 'error');
+            }
+            showLoading(false);
+        }
+
+        function sendQuery() {
+            debugLog('Sending query');
+            testRAGOnly();
+        }
+
+        function sendTestQuery(query) {
+            debugLog('Sending test query', {query});
+            document.getElementById('queryInput').value = query;
+            testFullFlow();
+        }
+
+        // Allow Enter key to send query
+        document.getElementById('queryInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendQuery();
+            }
+        });
+
+        // Test health on load
+        window.onload = function() {
+            debugLog('Page loaded');
+            addMessage('Page loaded - click anywhere to enable audio autoplay', 'debug');
+            testHealth();
+        };
+
+        // Add global error handling
+        window.addEventListener('error', function(e) {
+            debugLog('Global error', {
+                message: e.message,
+                filename: e.filename,
+                lineno: e.lineno,
+                colno: e.colno,
+                error: e.error
+            });
+            addMessage(`Global Error: ${e.message} at ${e.filename}:${e.lineno}`, 'error');
+        });
+    </script>
+</body>
+</html>

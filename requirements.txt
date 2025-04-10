@@ -1,0 +1,9 @@
+aiohttp
+aiohttp_cors
+python-dotenv
+azure-core
+azure-identity
+azure-search-documents
+azure-storage-blob
+rich
+

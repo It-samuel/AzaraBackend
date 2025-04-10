@@ -1,0 +1,1 @@
+﻿This is a test document about artificial intelligence and machine learning. Azure AI services help developers build intelligent applications using speech recognition, natural language processing, and computer vision capabilities.
