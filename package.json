@@ -48,9 +48,7 @@
     "eslint-plugin-import": "^2.29.0",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-promise": "^6.1.1",
-    "jest": "^29.7.0",
-    "nodemon": "^3.0.2",
-    "supertest": "^6.3.3"
+    "nodemon": "^3.0.2"
   },
   "engines": {
     "node": ">=18.0.0",
@@ -58,6 +56,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "your-repository-url"
+    "url": "https://github.com/It-samuel/AzaraBackend.git"
   }
 }
