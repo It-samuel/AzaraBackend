@@ -3,7 +3,7 @@ require('dotenv').config(); // 👈 Load environment variables first
 const app = require('./src/app');
 const logger = require('./src/utils/logger');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // Graceful shutdown handling
 const gracefulShutdown = (signal) => {
