@@ -50,37 +50,91 @@ class SpeechController {
   }
 
   // Speech to Text
-  async speechToText(req, res) {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ success: false, error: 'No audio file uploaded' });
-      }
+  // Speech to Text - Fixed method
+async speechToText(req, res) {
+  let tempFilePath = null;
+  
+  try {
+    console.log('Speech-to-text request received');
+    console.log('File info:', req.file);
+    console.log('Request headers:', req.headers);
 
-      logger.info('Processing speech-to-text', {
-        file: req.file.originalname,
-        size: req.file.size,
-        mimetype: req.file.mimetype
-      });
-
-      const result = await speechToTextService.transcribeAudioFile(req.file.path);
-      fs.unlinkSync(req.file.path);
-
-      res.json({
-        success: true,
-        data: {
-          ...result,
-          timestamp: new Date().toISOString()
-        }
-      });
-    } catch (error) {
-      logger.error('Speech-to-text error:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Speech transcription failed',
-        message: error.message
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No audio file uploaded' 
       });
     }
+
+    tempFilePath = req.file.path;
+
+    logger.info('Processing speech-to-text', {
+      file: req.file.originalname,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+      path: tempFilePath
+    });
+
+    // Check if file exists
+    if (!fs.existsSync(tempFilePath)) {
+      throw new Error('Uploaded file not found');
+    }
+
+    const result = await speechToTextService.transcribeAudioFile(tempFilePath);
+    
+    // Clean up the uploaded file
+    if (fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath);
+    }
+
+    console.log('Transcription result:', result);
+
+    // Return the format your frontend expects
+    res.json({
+      success: true,
+      text: result.text || result.transcription, // Support both formats
+      confidence: result.confidence,
+      duration: result.duration,
+      message: result.message,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Speech-to-text error:', error);
+    logger.error('Speech-to-text error:', error);
+
+    // Clean up file on error
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath);
+      } catch (cleanupError) {
+        logger.error('File cleanup error:', cleanupError);
+      }
+    }
+
+    // Handle specific errors
+    if (error.message.includes('Only audio files are allowed')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Only audio files are allowed'
+      });
+    }
+
+    if (error.message.includes('No speech detected')) {
+      return res.status(200).json({
+        success: true,
+        text: '',
+        message: 'No speech detected in the audio'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Speech transcription failed',
+      message: error.message
+    });
   }
+}
 
   // Text to Speech
   // Text to Speech - Complete fixed method
