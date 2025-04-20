@@ -129,10 +129,10 @@
         
         <div>
             <h3>Connection Info:</h3>
-            <p><strong>API Base URL:</strong> http://localhost:3000</p>
+            <p><strong>API Base URL:</strong> https://azarabackend-eha3d5hhbef0evgh.germanywestcentral-01.azurewebsites.net/</p>
             <p><strong>RAG Endpoint:</strong> /api/rag/query</p>
             <p><strong>TTS Endpoint:</strong> /api/speech/text-to-speech</p>
-            <p><strong>Health Check:</strong> <a href="http://localhost:3000/health" target="_blank">http://localhost:3000/health</a></p>
+            <p><strong>Health Check:</strong> <a href="https://azarabackend-eha3d5hhbef0evgh.germanywestcentral-01.azurewebsites.net/health" target="_blank">http://localhost:3000/health</a></p>
         </div>
     </div>
 
@@ -371,7 +371,7 @@
             debugLog('Testing health endpoint');
             showLoading(true);
             try {
-                const response = await fetch('http://localhost:3000/health');
+                const response = await fetch('https://azarabackend-eha3d5hhbef0evgh.germanywestcentral-01.azurewebsites.net/health');
                 debugLog('Health check response', response);
                 
                 if (!response.ok) {
@@ -400,7 +400,7 @@
             showLoading(true);
             
             try {
-                const response = await fetch('http://localhost:3000/api/rag/query', {
+                const response = await fetch('https://azarabackend-eha3d5hhbef0evgh.germanywestcentral-01.azurewebsites.net/api/rag/query', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -433,7 +433,7 @@
             
             try {
                 debugLog('Sending TTS request');
-                const response = await fetch('http://localhost:3000/api/speech/text-to-speech', {
+                const response = await fetch('https://azarabackend-eha3d5hhbef0evgh.germanywestcentral-01.azurewebsites.net/api/speech/text-to-speech', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -509,7 +509,7 @@
             try {
                 // Step 1: Get RAG response
                 debugLog('Step 1: Sending RAG query');
-                const ragResponse = await fetch('http://localhost:3000/api/rag/query', {
+                const ragResponse = await fetch('https://azarabackend-eha3d5hhbef0evgh.germanywestcentral-01.azurewebsites.net/api/rag/query', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -531,7 +531,7 @@
                 
                 // Step 2: Convert to speech
                 debugLog('Step 2: Converting to speech');
-                const ttsResponse = await fetch('http://localhost:3000/api/speech/text-to-speech', {
+                const ttsResponse = await fetch('https://azarabackend-eha3d5hhbef0evgh.germanywestcentral-01.azurewebsites.net/api/speech/text-to-speech', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
